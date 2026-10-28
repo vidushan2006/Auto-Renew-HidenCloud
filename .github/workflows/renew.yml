@@ -3,7 +3,7 @@ name: Auto Renew HidenCloud
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 23 * * 0' # 根据到期时间的前一天推算星期几来续期，最后一个数字代表星期
+    - cron: '30 23 * * 0' # Every Sunday at 23:30 UTC
 
 permissions:
   contents: write
@@ -21,37 +21,37 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: true
 
-
-      - name: ⚙ 设置 Python
+      - name: ⚙ Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
-      - name: 🛠️ 安装系统依赖和python依赖
+      - name: 🛠️ Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
           pip install patchright requests 'requests[socks]'
           python -m patchright install --with-deps chrome
 
-      - name: ⚙ 设置sing-box代理
+      - name: ⚙ Set up sing-box proxy (Optional)
         continue-on-error: true
         env:
           NODE_LINK: ${{ secrets.NODE_LINK }}
         run: |
           bash <(wget -qO- https://main.ssss.nyc.mn/setup_proxy.sh)
 
-      - name: 🚀 运行续期脚本
+      - name: 🚀 Run Renewal Script
         env:
           EMAIL: ${{ secrets.EMAIL }}
           PASSWORD: ${{ secrets.PASSWORD }}
           COOKIE_VALUE: ${{ secrets.COOKIE_VALUE }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -u app.py
 
-      # 更新时间到time.txt,避免6个月未更新导致工作流暂停
-      - name: 🕒 更新时间
+      - name: 🕒 Update time.txt
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -64,7 +64,7 @@ jobs:
             git push origin main
           fi
       
-      - name: 🧹 清理旧的工作流运行记录
+      - name: 🧹 Clean old workflow runs
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,7 +74,7 @@ jobs:
           for run_id in $runs; do
             count=$((count + 1))
             if [ $count -gt 1 ]; then
-              echo "删除运行记录: $run_id"
+              echo "Deleting run: $run_id"
               gh run delete $run_id || true
             fi
           done
