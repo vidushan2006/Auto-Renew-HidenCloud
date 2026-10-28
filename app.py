@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import os, re, sys, time, random, requests
+from datetime import datetime, timedelta
+
 try:
     from patchright.sync_api import sync_playwright
     USING_PATCHRIGHT = True
@@ -15,7 +17,7 @@ PASSWORD     = os.environ.get('PASSWORD') or "zx12cv34vidushan."
 TG_CHAT_ID   = os.environ.get('TG_CHAT_ID') or ""
 TG_BOT_TOKEN = os.environ.get('TG_BOT_TOKEN') or ""
 
-# 📡 VIDU WhatsApp Bot Webhook Configuration (Allocation Port 24723)
+# 📡 VIDU WhatsApp Bot Webhook Configuration
 WEBHOOK_URL   = os.environ.get('WEBHOOK_URL') or "http://lou.hidencloud.com:24723/api/renew-webhook"
 WEBHOOK_TOKEN = os.environ.get('WEBHOOK_TOKEN') or "ptlc_5dDf5MBF1p4axsIzRTCe1L8KVIz1b0DytXFVdlneJb5"
 
@@ -43,7 +45,7 @@ try {
 """
 
 def notify_whatsapp_bot(expiry_date: str, status: str = "synced", cooldown: str = ""):
-    if not expiry_date:
+    if not expiry_date or expiry_date == "Unknown":
         return
     try:
         payload = {
@@ -493,9 +495,12 @@ def renew_service(page):
         pay_btn.wait_for(state="visible", timeout=30000)
         pay_btn.click()
         log("✅ Invoice successfully paid!")
-        time.sleep(6)
+        
+        # ⏱️ Wait 8 seconds for billing backend to reflect the new +7 days
+        time.sleep(8)
         page.goto(SERVICE_URL, wait_until="domcontentloaded", timeout=60000)
         handle_cloudflare(page)
+        time.sleep(4)
         return True
     except Exception as e:
         log(f"❌ Renewal error: {e}")
@@ -511,12 +516,10 @@ def main():
             browser, page = open_browser(p)
 
             if not login(page):
-                notify_whatsapp_bot("", status="failed")
                 sys.exit(1)
 
             server_id = get_server_id(page)
             if not server_id:
-                notify_whatsapp_bot("", status="failed")
                 sys.exit(1)
             SERVICE_URL = f"{BASE_URL}/service/{server_id}/manage"
 
@@ -531,7 +534,17 @@ def main():
                 status = "❌ Renewal Failed"
                 notify_whatsapp_bot(old_due, status="failed")
             else:
-                new_due = get_due_date(page)
+                # Re-fetch after payment
+                fetched_due = get_due_date(page)
+                if fetched_due != "Unknown" and fetched_due != old_due:
+                    new_due = fetched_due
+                else:
+                    # Fallback calculate +7 days if the website UI is slow to reflect
+                    try:
+                        dt = datetime.strptime(old_due, "%d %b %Y")
+                        new_due = (dt + timedelta(days=7)).strftime("%d %b %Y")
+                    except Exception:
+                        new_due = old_due
                 status = "✅ Successfully Renewed (+7 Days)"
                 notify_whatsapp_bot(new_due, status="renewed")
 
